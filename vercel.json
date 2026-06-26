@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "/boss",
+      "dest": "/boss/index.html"
+    },
+    {
+      "src": "/boss/(.*)",
+      "dest": "/boss/index.html"
+    }
+  ]
+}
