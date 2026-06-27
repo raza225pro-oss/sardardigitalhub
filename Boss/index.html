@@ -311,18 +311,19 @@ input:checked + .slider:before { transform: translateX(21px); }
                     <div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border-radius:10px;display:flex;justify-content:center;align-items:center;font-size:1.1rem;border:1px solid var(--card-border);flex-shrink:0;"><i id="link-icon-preview" class="fa-brands fa-android" style="color:var(--premium);"></i></div>
                 </div>
             </div>
-            <div id="link-group-icon-img" class="hidden">
+            <label class="form-label" style="margin-top:16px;">URL / APK Download Link</label>
+            <div style="display:flex;gap:8px;">
+                <input type="url" id="link-url" required placeholder="https://example.com/download.apk" style="flex:1;">
+                <button type="button" class="btn-outline" style="width:auto;padding:0 14px;flex-shrink:0;border-radius:10px;" onclick="Admin.fetchLinkIcon()"><i class="fa-solid fa-magnifying-glass"></i> Fetch</button>
+                <button type="button" class="btn-outline" style="width:auto;padding:0 14px;flex-shrink:0;border-radius:10px;border-color:rgba(255,100,50,0.3);color:#ff6432;" onclick="document.getElementById('link-icon-type').value='img';Admin.toggleLinkIconType();document.getElementById('link-icon-file').click();"><i class="fa-solid fa-upload"></i> Upload</button>
+            </div>
+            <div id="link-group-icon-img" class="hidden" style="margin-top:10px;">
                 <label class="form-label">Custom Image Icon</label>
                 <div style="display:flex;gap:10px;align-items:center;margin-bottom:11px;">
                     <div class="file-upload-wrapper" style="flex:1;padding:12px;"><input type="file" id="link-icon-file" class="file-upload-input" accept="image/*"><i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary);"></i> Select Image</div>
                     <div style="width:48px;height:48px;border-radius:10px;background:rgba(255,255,255,0.05);display:flex;justify-content:center;align-items:center;overflow:hidden;border:1px solid var(--card-border);flex-shrink:0;"><img id="link-img-preview" src="" style="width:100%;height:100%;object-fit:cover;display:none;"><i id="link-img-placeholder" class="fa-solid fa-image" style="color:var(--text-muted);"></i></div>
                 </div>
                 <input type="hidden" id="link-icon-base64">
-            </div>
-            <label class="form-label" style="margin-top:16px;">URL / APK Download Link</label>
-            <div style="display:flex;gap:8px;">
-                <input type="url" id="link-url" required placeholder="https://example.com/download.apk" style="flex:1;">
-                <button type="button" class="btn-outline" style="width:auto;padding:0 14px;flex-shrink:0;border-radius:10px;" onclick="Admin.fetchLinkIcon()"><i class="fa-solid fa-magnifying-glass"></i> Fetch Icon</button>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0;"><strong style="color:#fff;font-size:13px;">App/Link is Active</strong><label class="toggle-switch"><input type="checkbox" id="link-active" checked><span class="slider"></span></label></div>
             <button type="submit" class="btn-primary" style="background:var(--premium);color:#000;">Save App / Link</button>
@@ -563,17 +564,28 @@ const Admin = {
             });
         });
 
-        document.getElementById('form-add-link').addEventListener('submit', (e) => {
+        document.getElementById('form-add-link').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const id = document.getElementById('link-id').value || 'l_'+Math.random().toString(36).substr(2,9);
+            const url = document.getElementById('link-url').value;
             const iconType = document.getElementById('link-icon-type').value;
+            const hasCustomIcon = document.getElementById('link-icon-base64').value;
+            const hasCustomFA = document.getElementById('link-icon-fa').value !== 'fa-brands fa-android';
+            if(url && !hasCustomIcon && !hasCustomFA && iconType === 'fa') {
+                this.toast('Fetching icon before save...');
+                await new Promise((resolve) => {
+                    this.fetchFavicon(url, true);
+                    setTimeout(resolve, 4000);
+                });
+            }
+            const id = document.getElementById('link-id').value || 'l_'+Math.random().toString(36).substr(2,9);
+            const finalIconType = document.getElementById('link-icon-type').value;
             const linkData = {
-                id, name:document.getElementById('link-name').value, iconType,
-                icon: iconType==='fa' ? document.getElementById('link-icon-fa').value : '',
-                iconData: iconType==='img' ? document.getElementById('link-icon-base64').value : '',
-                active:document.getElementById('link-active').checked, url:document.getElementById('link-url').value
+                id, name:document.getElementById('link-name').value, iconType: finalIconType,
+                icon: finalIconType==='fa' ? document.getElementById('link-icon-fa').value : '',
+                iconData: finalIconType==='img' ? document.getElementById('link-icon-base64').value : '',
+                active:document.getElementById('link-active').checked, url: url
             };
-            if(iconType==='img' && !linkData.iconData) return this.toast('Upload an image icon','error');
+            if(finalIconType==='img' && !linkData.iconData) return this.toast('Upload an image icon','error');
             const idx = this.state.links.findIndex(x => x.id===id);
             if(idx>-1) this.state.links[idx]=linkData; else this.state.links.push(linkData);
             database.ref('links').set(this.state.links).then(() => {
@@ -694,14 +706,14 @@ const Admin = {
         window.Admin.fetchLinkIcon = () => Admin.manualFetchLinkIcon();
     },
 
-    // Auto-fetch on blur (silent)
+    // Auto-fetch on blur (with toast)
     autoFetchLinkIcon() {
         const url = document.getElementById('link-url').value;
         const iconType = document.getElementById('link-icon-type').value;
         const hasCustomIcon = document.getElementById('link-icon-base64').value;
         const hasCustomFA = document.getElementById('link-icon-fa').value !== 'fa-brands fa-android';
         if(url && !hasCustomIcon && !hasCustomFA && iconType === 'fa'){
-            this.fetchFavicon(url, false);
+            this.fetchFavicon(url, true);
         }
     },
 
@@ -746,109 +758,43 @@ const Admin = {
     fetchFavicon(url, showToast) {
         try {
             const parsedUrl = new URL(url);
-            const domain = parsedUrl.hostname;
-            const isMediaFire = /mediafire\.com/i.test(domain);
-            const ext = (parsedUrl.pathname.split('.').pop() || '').toLowerCase().split('?')[0];
-            const fileExts = ['apk','zip','exe','msi','dmg','deb','rpm','rar','7z','tar','gz','iso','img','pdf','doc','docx','xls','xlsx','ppt','pptx','mp3','mp4','avi','mkv','wav','flac','png','jpg','jpeg','gif','webp','svg','txt','csv'];
-            const extIcons = {
+            const pathLower = parsedUrl.pathname.toLowerCase();
+
+            const extIconMap = {
                 apk:'fa-brands fa-android', zip:'fa-solid fa-file-zipper', rar:'fa-solid fa-file-zipper', '7z':'fa-solid fa-file-zipper',
                 exe:'fa-solid fa-gear', msi:'fa-solid fa-gear', dmg:'fa-brands fa-apple', deb:'fa-brands fa-linux', rpm:'fa-brands fa-linux',
                 pdf:'fa-solid fa-file-pdf', doc:'fa-solid fa-file-word', docx:'fa-solid fa-file-word',
-                xls:'fa-solid fa-file-excel', xlsx:'fa-solid fa-file-excel', ppt:'fa-solid fa-file-powerpoint', pptx:'fa-solid fa-file-powerpoint',
-                mp3:'fa-solid fa-file-audio', mp4:'fa-solid fa-file-video', avi:'fa-solid fa-file-video', mkv:'fa-solid fa-file-video', wav:'fa-solid fa-file-audio', flac:'fa-solid fa-file-audio',
-                png:'fa-solid fa-file-image', jpg:'fa-solid fa-file-image', jpeg:'fa-solid fa-file-image', gif:'fa-solid fa-file-image', webp:'fa-solid fa-file-image', svg:'fa-solid fa-file-image',
-                iso:'fa-solid fa-hard-drive', img:'fa-solid fa-hard-drive', txt:'fa-solid fa-file-lines', csv:'fa-solid fa-file-csv'
+                xls:'fa-solid fa-file-excel', xlsx:'fa-solid fa-file-excel',
+                mp3:'fa-solid fa-file-audio', mp4:'fa-solid fa-file-video', avi:'fa-solid fa-file-video', mkv:'fa-solid fa-file-video',
+                mov:'fa-solid fa-file-video', webm:'fa-solid fa-file-video', '3gp':'fa-solid fa-file-video', flv:'fa-solid fa-file-video',
+                png:'fa-solid fa-file-image', jpg:'fa-solid fa-file-image', jpeg:'fa-solid fa-file-image', gif:'fa-solid fa-file-image',
+                webp:'fa-solid fa-file-image', svg:'fa-solid fa-file-image',
+                iso:'fa-solid fa-compact-disc', txt:'fa-solid fa-file-lines', csv:'fa-solid fa-file-csv', torrent:'fa-solid fa-magnet'
             };
 
-            const setIconFromDataUrl = (dataUrl) => {
-                document.getElementById('link-icon-base64').value = dataUrl;
-                document.getElementById('link-img-preview').src = dataUrl;
-                document.getElementById('link-img-preview').style.display = 'block';
-                document.getElementById('link-img-placeholder').style.display = 'none';
-                document.getElementById('link-icon-type').value = 'img';
+            const setExtIcon = (iconClass) => {
+                document.getElementById('link-icon-fa').value = iconClass;
+                document.getElementById('link-icon-type').value = 'fa';
                 this.toggleLinkIconType();
+                document.getElementById('link-icon-preview').className = iconClass;
             };
 
-            const tryFaviconServices = (cb) => {
-                const services = [
-                    'https://www.google.com/s2/favicons?url='+encodeURIComponent(domain)+'&sz=128',
-                    'https://icons.duckduckgo.com/ip3/'+domain+'.ico',
-                    'https://favicon.im/'+domain+'?size=128'
-                ];
-                let i = 0;
-                const tryNext = () => {
-                    if(i >= services.length) { cb(null); return; }
-                    const svcUrl = services[i++];
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    img.onload = () => {
-                        const c = document.createElement('canvas');
-                        c.width = 128; c.height = 128;
-                        c.getContext('2d').drawImage(img, 0, 0, 128, 128);
-                        cb(c.toDataURL('image/webp', 0.8));
-                    };
-                    img.onerror = () => tryNext();
-                    img.src = svcUrl;
-                };
-                tryNext();
-            };
-
-            if(isMediaFire) {
-                if(showToast) this.toast('MediaFire detected, fetching file icon...');
-                const corsProxies = [
-                    'https://api.allorigins.win/raw?url=',
-                    'https://corsproxy.io/?',
-                    'https://api.codetabs.com/v1/proxy?quest='
-                ];
-                let proxyIdx = 0;
-                const tryProxy = () => {
-                    if(proxyIdx >= corsProxies.length) {
-                        if(showToast) this.toast('MediaFire fetch failed, trying domain favicon...', 'error');
-                        tryFaviconServices((dataUrl) => {
-                            if(dataUrl) { setIconFromDataUrl(dataUrl); if(showToast) this.toast('Domain icon applied'); }
-                            else if(showToast) this.toast('Could not fetch any icon','error');
-                        });
-                        return;
-                    }
-                    const proxyUrl = corsProxies[proxyIdx++] + encodeURIComponent(url);
-                    fetch(proxyUrl).then(r => r.text()).then(html => {
-                        const ogMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
-                            || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-                        if(ogMatch && ogMatch[1]) {
-                            let ogUrl = ogMatch[1];
-                            if(ogUrl.startsWith('//')) ogUrl = 'https:' + ogUrl;
-                            else if(ogUrl.startsWith('/')) ogUrl = parsedUrl.origin + ogUrl;
-                            const img = new Image();
-                            img.crossOrigin = 'anonymous';
-                            img.onload = () => {
-                                const c = document.createElement('canvas');
-                                c.width = 128; c.height = 128;
-                                c.getContext('2d').drawImage(img, 0, 0, 128, 128);
-                                setIconFromDataUrl(c.toDataURL('image/webp', 0.8));
-                                if(showToast) this.toast('MediaFire file icon fetched!');
-                            };
-                            img.onerror = () => tryProxy();
-                            img.src = ogUrl;
-                        } else {
-                            tryProxy();
-                        }
-                    }).catch(() => tryProxy());
-                };
-                tryProxy();
-            } else {
-                if(ext && extIcons[ext] && fileExts.includes(ext)) {
-                    document.getElementById('link-icon-fa').value = extIcons[ext];
-                    document.getElementById('link-icon-type').value = 'fa';
-                    this.toggleLinkIconType();
-                    document.getElementById('link-icon-preview').className = extIcons[ext];
-                    if(showToast) this.toast('File type icon applied: ' + ext.toUpperCase());
-                } else {
-                    tryFaviconServices((dataUrl) => {
-                        if(dataUrl) { setIconFromDataUrl(dataUrl); if(showToast) this.toast('Icon fetched successfully!'); }
-                        else if(showToast) this.toast('Could not fetch icon from any service','error');
-                    });
-                }
+            // Determine file extension from URL
+            let ext = '';
+            const match = pathLower.match(/\.([a-z0-9]+)(?:[?#]|$)/);
+            if (match && extIconMap[match[1]]) {
+                ext = match[1];
             }
+
+            if (ext && extIconMap[ext]) {
+                setExtIcon(extIconMap[ext]);
+                if(showToast) this.toast('Icon set: ' + ext.toUpperCase());
+                return;
+            }
+
+            // If no file type detected, use generic link icon
+            setExtIcon('fa-solid fa-link');
+            if(showToast) this.toast('Generic link icon applied','error');
         } catch(e) {
             if(showToast) this.toast('Invalid URL','error');
         }
