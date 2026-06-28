@@ -262,11 +262,11 @@ input:checked + .slider:before { transform: translateX(21px); }
                 <button type="submit" class="btn-primary" style="margin-top:12px;"><i class="fa-solid fa-save"></i> Save Payment Settings</button>
             </form>
         </div>
-        <h3 style="font-size:14px;margin:22px 0 10px;font-weight:700;color:var(--premium);"><i class="fa-solid fa-cube"></i> Premium Content</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;"><h3 style="font-size:14px;font-weight:700;color:var(--premium);margin:0;"><i class="fa-solid fa-cube"></i> Premium Content</h3><button class="btn-primary btn-sm" onclick="Admin.openPremiumContentSheet()" style="width:auto;padding:6px 12px;font-size:11px;border-radius:8px;"><i class="fa-solid fa-plus"></i> Add</button></div>
         <div class="list-group" id="list-premium-content"></div>
         <h3 style="font-size:14px;margin:22px 0 10px;font-weight:700;color:var(--premium);"><i class="fa-solid fa-envelope"></i> Payment Requests</h3>
         <div class="list-group" id="list-premium-requests"></div>
-        <h3 style="font-size:14px;margin:22px 0 10px;font-weight:700;color:var(--premium);"><i class="fa-solid fa-key"></i> Premium Access Keys</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;"><h3 style="font-size:14px;font-weight:700;color:var(--premium);margin:0;"><i class="fa-solid fa-key"></i> Premium Access Keys</h3><button class="btn-primary btn-sm" onclick="Admin.openPremiumKeySheet()" style="width:auto;padding:6px 12px;font-size:11px;border-radius:8px;"><i class="fa-solid fa-plus"></i> Add</button></div>
         <div class="list-group" id="list-premium-keys"></div>
     </div>
 
