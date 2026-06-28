@@ -472,7 +472,7 @@ const App = {
                 <div class="access-sub">${keyActive ? 'Enter passkey or continue as guest.' : 'Key system disabled. Continue as guest.'}</div>
                 ${keyActive ? `
                 <form onsubmit="App.keyLogin(event)" style="width:100%;">
-                    <input type="text" id="key-input" placeholder="Enter Passkey (e.g. darkmasterub)" autocapitalize="off" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);color:#fff;padding:14px 16px;border-radius:12px;font-size:15px;margin-bottom:14px;font-family:var(--font-body);outline:none;text-align:center;">
+                    <input type="text" id="key-input" placeholder="Enter Passkey" autocapitalize="off" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);color:#fff;padding:14px 16px;border-radius:12px;font-size:15px;margin-bottom:14px;font-family:var(--font-body);outline:none;text-align:center;">
                     <button type="submit" class="btn-guest" style="background:linear-gradient(135deg, var(--cyan), var(--green));">UNLOCK WITH KEY</button>
                 </form>
                 ` : ''}
