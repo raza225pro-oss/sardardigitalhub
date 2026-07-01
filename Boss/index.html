@@ -287,6 +287,11 @@ input:checked + .slider:before { transform: translateX(21px); }
 </div>
 
 <div class="sheet-overlay" id="overlay" onclick="Admin.hideSheets()"></div>
+<div class="sheet-overlay" id="screenshot-overlay" onclick="Admin.hideScreenshot()" style="z-index:3000;"></div>
+<div id="screenshot-viewer" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3001;max-width:92vw;max-height:88vh;background:rgba(0,0,0,0.9);border-radius:16px;padding:12px;border:1px solid var(--card-border);box-shadow:0 20px 60px rgba(0,0,0,0.8);">
+    <button onclick="Admin.hideScreenshot()" style="position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:15px;border:none;background:rgba(255,255,255,0.15);color:#fff;font-size:16px;cursor:pointer;z-index:3002;display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-xmark"></i></button>
+    <img id="screenshot-img" src="" style="max-width:100%;max-height:82vh;display:block;margin:auto;border-radius:10px;">
+</div>
 
 <div class="sheet" id="sheet-tool">
     <div class="sheet-drag"></div>
@@ -498,6 +503,7 @@ const Admin = {
     sessionKey: 'dv_ios_admin_session',
     currentTab: 'home',
     fabIcon: 'fa-plus',
+    _knownReqIds: null,
 
     init() { this.setupListeners(); this.connectFirebase(); },
 
@@ -554,6 +560,23 @@ const Admin = {
         this.state.premiumConfig = data.premiumConfig || { bankName:'EasyPaisa', accountNumber:'03238693440', receiverName:'Receiver', amount:500 };
         this.state.premiumContent = data.premiumContent || [];
         this.state.premiumRequests = Array.isArray(data.premiumRequests) ? data.premiumRequests : (data.premiumRequests ? Object.values(data.premiumRequests) : []);
+        this._knownReqIds = new Set(this.state.premiumRequests.map(r => r.id));
+        database.ref('premiumRequests').on('value', (snap) => {
+            const val = snap.val() || [];
+            const arr = Array.isArray(val) ? val : (val ? Object.values(val) : []);
+            const currentIds = new Set(arr.map(r => r.id));
+            if (this._knownReqIds && this._knownReqIds.size > 0) {
+                const newReqs = arr.filter(r => !this._knownReqIds.has(r.id));
+                if (newReqs.length > 0) {
+                    const names = newReqs.map(r => r.whatsapp || r.email || 'Unknown').join(', ');
+                    this.toast('New payment request from ' + names, 'success');
+                    this.saveLog('New Payment Request', 'WhatsApp: ' + names);
+                }
+            }
+            this.state.premiumRequests = arr;
+            this._knownReqIds = currentIds;
+            if (this.initialLoad) this.renderAll();
+        });
         if(!this.initialLoad) { this.initialLoad = true; setTimeout(() => this.handleRouting(), 800); }
         else if(sessionStorage.getItem(this.sessionKey)) this.renderAll();
     },
@@ -937,16 +960,7 @@ const Admin = {
         document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
         if(el) el.classList.add('active');
         this.updateFab();
-        if(tabId === 'premium') {
-            // Refresh premium data from Firebase
-            database.ref('premiumRequests').once('value', (snap) => {
-                const val = snap.val() || [];
-                this.state.premiumRequests = Array.isArray(val) ? val : (val ? Object.values(val) : []);
-                this.renderAll();
-            });
-        } else {
-            this.renderAll();
-        }
+        this.renderAll();
     },
 
     updateFab() {
@@ -1051,7 +1065,7 @@ const Admin = {
             const d = r.time ? new Date(r.time) : new Date();
             const timeStr = !isNaN(d.getTime()) ? d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : 'Unknown';
             const approveBtn = st==='pending' ? '<button class="btn-primary btn-sm" onclick="Admin.approveRequest(\''+h(r.id)+'\')"><i class="fa-solid fa-check"></i></button><button class="btn-danger btn-sm" onclick="Admin.denyRequest(\''+h(r.id)+'\')"><i class="fa-solid fa-xmark"></i></button>' : '';
-            const screenshotHtml = r.screenshot ? '<div style="margin-top:6px;"><a href="#" onclick="window.open(\''+h(r.screenshot)+'\',\'_blank\');return false;" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--cyan);"><i class="fa-solid fa-image"></i> View Screenshot</a></div>' : '';
+            const screenshotHtml = r.screenshot ? '<div style="margin-top:6px;"><a href="#" onclick="Admin.viewScreenshot(\''+h(r.id)+'\');return false;" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--cyan);"><i class="fa-solid fa-image"></i> View Screenshot</a></div>' : '';
             const emailHtml = r.email ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;"><i class="fa-solid fa-envelope"></i> '+h(r.email)+'</div>' : '';
             return '<div class="list-item"><div class="item-info"><div class="item-title" style="font-size:13px;"><i class="fa-brands fa-whatsapp" style="color:#25D366;"></i> '+h(r.whatsapp)+'</div>'+emailHtml+'<div class="item-sub">'+timeStr+' &bull; <span style="color:'+stColor+';font-weight:600;">'+stLabel+'</span></div>'+screenshotHtml+'</div><div class="item-actions">'+approveBtn+'</div></div>';
         }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No payment requests.</div>';
@@ -1247,6 +1261,20 @@ const Admin = {
             this.toast('Payment request denied');
             this.renderAll();
         }).catch(() => this.toast('Failed to deny request','error'));
+    },
+
+    viewScreenshot(id) {
+        const req = this.state.premiumRequests.find(x=>x.id===id);
+        if (!req || !req.screenshot) { this.toast('No screenshot available','error'); return; }
+        document.getElementById('screenshot-img').src = req.screenshot;
+        document.getElementById('screenshot-overlay').classList.add('active');
+        document.getElementById('screenshot-viewer').style.display = 'block';
+    },
+
+    hideScreenshot() {
+        document.getElementById('screenshot-overlay').classList.remove('active');
+        document.getElementById('screenshot-viewer').style.display = 'none';
+        document.getElementById('screenshot-img').src = '';
     }
 };
 
