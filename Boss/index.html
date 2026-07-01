@@ -1083,7 +1083,8 @@ const Admin = {
             const d = new Date(r.time);
             const timeStr = d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
             const approveBtn = st==='pending' ? '<button class="btn-primary btn-sm" onclick="Admin.approveRequest(\''+h(r.id)+'\')"><i class="fa-solid fa-check"></i></button><button class="btn-danger btn-sm" onclick="Admin.denyRequest(\''+h(r.id)+'\')"><i class="fa-solid fa-xmark"></i></button>' : '';
-            return '<div class="list-item"><div class="item-info"><div class="item-title" style="font-size:13px;"><i class="fa-brands fa-whatsapp" style="color:#25D366;"></i> '+h(r.whatsapp)+'</div><div class="item-sub">'+timeStr+' &bull; <span style="color:'+stColor+';font-weight:600;">'+stLabel+'</span></div></div><div class="item-actions">'+approveBtn+'</div></div>';
+            const screenshotHtml = r.screenshot ? '<div style="margin-top:6px;"><a href="#" onclick="window.open(\''+h(r.screenshot)+'\',\'_blank\');return false;" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--cyan);"><i class="fa-solid fa-image"></i> View Screenshot</a></div>' : '';
+            return '<div class="list-item"><div class="item-info"><div class="item-title" style="font-size:13px;"><i class="fa-brands fa-whatsapp" style="color:#25D366;"></i> '+h(r.whatsapp)+'</div><div class="item-sub">'+timeStr+' &bull; <span style="color:'+stColor+';font-weight:600;">'+stLabel+'</span></div>'+screenshotHtml+'</div><div class="item-actions">'+approveBtn+'</div></div>';
         }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No payment requests.</div>';
 
         // Premium Keys List
