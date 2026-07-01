@@ -13,7 +13,12 @@
       "tools": { ".write": "auth != null" },
       "links": { ".write": "auth != null" },
       "courses": { ".write": "auth != null" },
-      "logs": { ".write": "auth != null" }
+      "logs": { ".write": "auth != null" },
+      "premiumConfig": { ".write": "auth != null" },
+      "premiumContent": { ".write": "auth != null" },
+      "premiumRequests": { ".write": "auth != null" },
+      "premiumUsers": { ".write": "auth != null" },
+      "users": { ".write": "auth != null" }
     }
   }
   
@@ -266,8 +271,6 @@ input:checked + .slider:before { transform: translateX(21px); }
         <div class="list-group" id="list-premium-content"></div>
         <h3 style="font-size:14px;margin:22px 0 10px;font-weight:700;color:var(--premium);"><i class="fa-solid fa-envelope"></i> Payment Requests</h3>
         <div class="list-group" id="list-premium-requests"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;"><h3 style="font-size:14px;font-weight:700;color:var(--premium);margin:0;"><i class="fa-solid fa-key"></i> Premium Access Keys</h3><button class="btn-primary btn-sm" onclick="Admin.openPremiumKeySheet()" style="width:auto;padding:6px 12px;font-size:11px;border-radius:8px;"><i class="fa-solid fa-plus"></i> Add</button></div>
-        <div class="list-group" id="list-premium-keys"></div>
     </div>
 
     </div>
@@ -455,28 +458,7 @@ input:checked + .slider:before { transform: translateX(21px); }
 </div>
 
 <!-- PREMIUM KEY SHEET -->
-<div class="sheet" id="sheet-premium-key">
-    <div class="sheet-drag"></div>
-    <div class="sheet-header"><h3 id="sheet-premium-key-title">Generate Premium Key</h3><button class="sheet-close" onclick="Admin.hideSheets()"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="sheet-content">
-        <form id="form-premium-key">
-            <input type="hidden" id="premium-key-id">
-            <label class="form-label">Key Alias (Name)</label>
-            <input type="text" id="premium-key-name" required placeholder="e.g. VIP Premium">
-            <label class="form-label">Premium Key String</label>
-            <div style="display:flex;gap:8px;margin-bottom:11px;">
-                <input type="text" id="premium-key-string" style="margin:0;flex:1;" required>
-                <button type="button" class="btn-outline" style="width:auto;padding:0 14px;flex-shrink:0;" onclick="document.getElementById('premium-key-string').value='prem_'+Math.random().toString(36).substring(2,10)"><i class="fa-solid fa-dice"></i></button>
-            </div>
-            <div style="display:flex;gap:8px;">
-                <div style="flex:1;"><label class="form-label">Max Uses (0=infinite)</label><input type="number" id="premium-key-limit" value="0" min="0"></div>
-                <div style="flex:1;"><label class="form-label">Expiry Date</label><input type="date" id="premium-key-expiry"></div>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0;"><strong style="color:#fff;font-size:13px;">Key is Active</strong><label class="toggle-switch"><input type="checkbox" id="premium-key-active" checked><span class="slider"></span></label></div>
-            <button type="submit" class="btn-primary">Save Premium Key</button>
-        </form>
-    </div>
-</div>
+
 
 <script>
 const firebaseConfig = {
@@ -511,7 +493,7 @@ async function hashPass(pwd) {
 }
 
 const Admin = {
-    state: { admin:{}, keys:[], tools:[], links:[], courses:[], logs:[], premiumConfig:{ bankName:'EasyPaisa', accountNumber:'03238693440', receiverName:'Receiver', amount:500 }, premiumContent:[], premiumKeys:[], premiumRequests:[] },
+    state: { admin:{}, keys:[], tools:[], links:[], courses:[], logs:[], premiumConfig:{ bankName:'EasyPaisa', accountNumber:'03238693440', receiverName:'Receiver', amount:500 }, premiumContent:[], premiumRequests:[] },
     initialLoad: false,
     sessionKey: 'dv_ios_admin_session',
     currentTab: 'home',
@@ -532,7 +514,7 @@ const Admin = {
     saveLog(action, details) {
         this.state.logs.unshift({ time: new Date().toISOString(), action, details });
         if(this.state.logs.length > 100) this.state.logs.pop();
-        database.ref('logs').set(this.state.logs);
+        database.ref('logs').set(this.state.logs).catch(() => {});
     },
 
     connectFirebase() {
@@ -571,8 +553,7 @@ const Admin = {
         this.state.logs = data.logs || [];
         this.state.premiumConfig = data.premiumConfig || { bankName:'EasyPaisa', accountNumber:'03238693440', receiverName:'Receiver', amount:500 };
         this.state.premiumContent = data.premiumContent || [];
-        this.state.premiumKeys = data.premiumKeys || [];
-        this.state.premiumRequests = data.premiumRequests || [];
+        this.state.premiumRequests = Array.isArray(data.premiumRequests) ? data.premiumRequests : (data.premiumRequests ? Object.values(data.premiumRequests) : []);
         if(!this.initialLoad) { this.initialLoad = true; setTimeout(() => this.handleRouting(), 800); }
         else if(sessionStorage.getItem(this.sessionKey)) this.renderAll();
     },
@@ -602,10 +583,10 @@ const Admin = {
 
     toggleKeySystem(isActive) {
         this.state.admin.keySystemActive = isActive;
-        database.ref('admin').set(this.state.admin).then(() => {
+        database.ref('admin/keySystemActive').set(isActive).then(() => {
             this.saveLog('Security Update', 'Key Login System: '+(isActive?'ENABLED':'DISABLED'));
             this.toast('Key System '+(isActive?'Enabled':'Disabled'));
-        });
+        }).catch(() => this.toast('Failed to update key system','error'));
     },
 
     setupListeners() {
@@ -639,10 +620,22 @@ const Admin = {
                 whatsapp: document.getElementById('set-fj-wa').value,
                 note: document.getElementById('set-fj-note').value
             };
-            database.ref('admin').set(this.state.admin).then(() => {
+            database.ref('admin').update({
+                user: this.state.admin.user,
+                passHash: this.state.admin.passHash,
+                waLink: document.getElementById('set-wa-link').value,
+                logo: document.getElementById('admin-logo-base64').value || '',
+                keySystemActive: this.state.admin.keySystemActive,
+                forceJoin: {
+                    active: document.getElementById('set-fj-active').checked,
+                    telegram: document.getElementById('set-fj-tg').value,
+                    whatsapp: document.getElementById('set-fj-wa').value,
+                    note: document.getElementById('set-fj-note').value
+                }
+            }).then(() => {
                 this.saveLog('Settings Updated','Admin config and security updated');
                 this.toast('Settings Saved Successfully');
-            });
+            }).catch(() => this.toast('Failed to save settings','error'));
         });
 
         document.getElementById('form-add-tool').addEventListener('submit', (e) => {
@@ -661,21 +654,17 @@ const Admin = {
             database.ref('tools').set(this.state.tools).then(() => {
                 this.saveLog('Tool Saved','HTML Tool: '+toolData.name);
                 this.hideSheets(); this.toast('HTML Tool Saved');
-            });
+            }).catch(() => this.toast('Failed to save tool','error'));
         });
 
-        document.getElementById('form-add-link').addEventListener('submit', async (e) => {
+        document.getElementById('form-add-link').addEventListener('submit', (e) => {
             e.preventDefault();
             const url = document.getElementById('link-url').value;
             const iconType = document.getElementById('link-icon-type').value;
             const hasCustomIcon = document.getElementById('link-icon-base64').value;
             const hasCustomFA = document.getElementById('link-icon-fa').value !== 'fa-brands fa-android';
             if(url && !hasCustomIcon && !hasCustomFA && iconType === 'fa') {
-                this.toast('Fetching icon before save...');
-                await new Promise((resolve) => {
-                    this.fetchFavicon(url, true);
-                    setTimeout(resolve, 4000);
-                });
+                this.fetchFavicon(url, true);
             }
             const id = document.getElementById('link-id').value || 'l_'+Math.random().toString(36).substr(2,9);
             const finalIconType = document.getElementById('link-icon-type').value;
@@ -691,7 +680,7 @@ const Admin = {
             database.ref('links').set(this.state.links).then(() => {
                 this.saveLog('Link/App Saved','Link: '+linkData.name);
                 this.hideSheets(); this.toast('APK / Web Link Saved');
-            });
+            }).catch(() => this.toast('Failed to save link','error'));
         });
 
         document.getElementById('form-add-course').addEventListener('submit', (e) => {
@@ -707,7 +696,7 @@ const Admin = {
             database.ref('courses').set(this.state.courses).then(() => {
                 this.saveLog('Course Saved','Course: '+courseData.name);
                 this.hideSheets(); this.toast('Course Saved');
-            });
+            }).catch(() => this.toast('Failed to save course','error'));
         });
 
         document.getElementById('form-add-key').addEventListener('submit', (e) => {
@@ -732,7 +721,7 @@ const Admin = {
             database.ref('keys').set(this.state.keys).then(() => {
                 this.saveLog('Key Saved','Alias: '+keyData.name);
                 this.hideSheets(); this.toast('Access Key Generated');
-            });
+            }).catch(() => this.toast('Failed to save key','error'));
         });
 
         // Premium Config Form
@@ -747,7 +736,7 @@ const Admin = {
             database.ref('premiumConfig').set(this.state.premiumConfig).then(() => {
                 this.saveLog('Premium Config Updated', 'Premium payment settings saved');
                 this.toast('Payment settings saved');
-            });
+            }).catch(() => this.toast('Failed to save payment settings','error'));
         });
 
         // Premium Content Form
@@ -770,30 +759,7 @@ const Admin = {
             database.ref('premiumContent').set(this.state.premiumContent).then(() => {
                 this.saveLog('Premium Content Saved', 'Premium: '+data.name);
                 this.hideSheets(); this.toast('Premium content saved');
-            });
-        });
-
-        // Premium Key Form
-        document.getElementById('form-premium-key').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const id = document.getElementById('premium-key-id').value || 'pk_'+Math.random().toString(36).substr(2,9);
-            const keyStr = document.getElementById('premium-key-string').value;
-            if(!keyStr) return this.toast('Enter a premium key string','error');
-            if(this.state.premiumKeys.find(x => x.key===keyStr && x.id!==id)) return this.toast('Premium key already exists','error');
-            const existing = this.state.premiumKeys.find(x=>x.id===id);
-            const data = {
-                id, name: document.getElementById('premium-key-name').value, key: keyStr,
-                limit: parseInt(document.getElementById('premium-key-limit').value)||0,
-                expiry: document.getElementById('premium-key-expiry').value,
-                active: document.getElementById('premium-key-active').checked,
-                uses: existing ? (existing.uses || 0) : 0
-            };
-            const idx = this.state.premiumKeys.findIndex(x => x.id===id);
-            if(idx>-1) this.state.premiumKeys[idx]=data; else this.state.premiumKeys.push(data);
-            database.ref('premiumKeys').set(this.state.premiumKeys).then(() => {
-                this.saveLog('Premium Key Saved', 'Alias: '+data.name);
-                this.hideSheets(); this.toast('Premium key saved');
-            });
+            }).catch(() => this.toast('Failed to save premium content','error'));
         });
 
         const processImage = (fileInputId, base64InputId, previewImgId, placeholderId, maxW=256) => {
@@ -833,11 +799,11 @@ const Admin = {
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     let w=img.width, h=img.height;
-                    const maxW = 80;
+                    const maxW = 180;
                     if(w>maxW){h*=maxW/w;w=maxW;}
                     canvas.width=w; canvas.height=h;
                     canvas.getContext('2d').drawImage(img,0,0,w,h);
-                    const dataUrl = canvas.toDataURL('image/webp',0.6); // Lower quality for KB size
+                    const dataUrl = canvas.toDataURL('image/webp',0.85);
                     document.getElementById('admin-logo-base64').value = dataUrl;
                     document.getElementById('admin-logo-preview').src = dataUrl;
                     document.getElementById('admin-logo-preview').style.display = 'block';
@@ -974,7 +940,8 @@ const Admin = {
         if(tabId === 'premium') {
             // Refresh premium data from Firebase
             database.ref('premiumRequests').once('value', (snap) => {
-                this.state.premiumRequests = snap.val() || [];
+                const val = snap.val() || [];
+                this.state.premiumRequests = Array.isArray(val) ? val : (val ? Object.values(val) : []);
                 this.renderAll();
             });
         } else {
@@ -1025,17 +992,18 @@ const Admin = {
         document.getElementById('stat-logs').textContent = this.state.logs.length;
 
         document.getElementById('list-logs').innerHTML = this.state.logs.slice(0,15).map(log => {
-            const d = new Date(log.time);
-            return '<div class="list-item" style="padding:11px 16px;"><div class="item-info"><div class="item-title" style="font-size:13px;font-weight:600;">'+h(log.action)+'</div><div class="item-sub" style="font-size:10px;">'+d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+' &bull; '+h(log.details)+'</div></div></div>';
+            const d = log.time ? new Date(log.time) : new Date();
+            const ts = !isNaN(d.getTime()) ? d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : 'Unknown';
+            return '<div class="list-item" style="padding:11px 16px;"><div class="item-info"><div class="item-title" style="font-size:13px;font-weight:600;">'+h(log.action)+'</div><div class="item-sub" style="font-size:10px;">'+ts+' &bull; '+h(log.details)+'</div></div></div>';
         }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No logs found.</div>';
 
         document.getElementById('list-tools').innerHTML = this.state.tools.map(t => {
-            const ic = t.iconType==='img' && t.iconData ? '<img src="'+h(t.iconData)+'" style="width:22px;height:22px;object-fit:cover;border-radius:5px;">' : '<i class="'+h(t.icon)+'" style="color:var(--primary);"></i>';
+            const ic = t.iconType==='img' && t.iconData ? '<img src="'+h(t.iconData)+'" style="width:22px;height:22px;object-fit:cover;border-radius:5px;">' : '<i class="'+h(t.icon||'fa-solid fa-cube')+'" style="color:var(--primary);"></i>';
             return '<div class="list-item"><div class="item-info"><div class="item-title">'+ic+' '+h(t.name)+'</div><div class="item-sub"><span class="badge '+(t.active?'active':'inactive')+'">'+(t.active?'Active':'Disabled')+'</span></div></div><div class="item-actions"><button class="btn-outline btn-sm" onclick="Admin.editTool(\''+h(t.id)+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-danger btn-sm" onclick="Admin.delTool(\''+h(t.id)+'\')"><i class="fa-solid fa-trash"></i></button></div></div>';
         }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No HTML Tools.</div>';
 
         document.getElementById('list-links').innerHTML = this.state.links.map(l => {
-            const ic = l.iconType==='img' && l.iconData ? '<img src="'+h(l.iconData)+'" style="width:22px;height:22px;object-fit:cover;border-radius:5px;">' : '<i class="'+h(l.icon)+'" style="color:var(--premium);"></i>';
+            const ic = l.iconType==='img' && l.iconData ? '<img src="'+h(l.iconData)+'" style="width:22px;height:22px;object-fit:cover;border-radius:5px;">' : '<i class="'+h(l.icon||'fa-brands fa-android')+'" style="color:var(--premium);"></i>';
             return '<div class="list-item"><div class="item-info"><div class="item-title">'+ic+' '+h(l.name)+'</div><div class="item-sub"><span class="badge '+(l.active?'active':'inactive')+'">'+(l.active?'Active':'Disabled')+'</span> External Link</div></div><div class="item-actions"><button class="btn-outline btn-sm" onclick="Admin.editLink(\''+h(l.id)+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-danger btn-sm" onclick="Admin.delLink(\''+h(l.id)+'\')"><i class="fa-solid fa-trash"></i></button></div></div>';
         }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No APKs / Links.</div>';
 
@@ -1070,7 +1038,7 @@ const Admin = {
 
         // Premium Content List
         document.getElementById('list-premium-content').innerHTML = this.state.premiumContent.map(c => {
-            const ic = c.iconType==='img' && c.iconData ? '<img src="'+h(c.iconData)+'" style="width:22px;height:22px;object-fit:cover;border-radius:5px;">' : '<i class="'+h(c.icon)+'" style="color:var(--premium);"></i>';
+            const ic = c.iconType==='img' && c.iconData ? '<img src="'+h(c.iconData)+'" style="width:22px;height:22px;object-fit:cover;border-radius:5px;">' : '<i class="'+h(c.icon||'fa-solid fa-cube')+'" style="color:var(--premium);"></i>';
             const typeMap = { course:'Course', apk:'APK', video:'Video', image:'Image', zip:'ZIP' };
             return '<div class="list-item"><div class="item-info"><div class="item-title">'+ic+' '+h(c.name)+'</div><div class="item-sub"><span class="badge '+(c.active?'active':'inactive')+'">'+(c.active?'Active':'Disabled')+'</span> '+(typeMap[c.type]||c.type||'')+'</div></div><div class="item-actions"><button class="btn-outline btn-sm" onclick="Admin.editPremiumContent(\''+h(c.id)+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-danger btn-sm" onclick="Admin.delPremiumContent(\''+h(c.id)+'\')"><i class="fa-solid fa-trash"></i></button></div></div>';
         }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No premium content.</div>';
@@ -1080,18 +1048,14 @@ const Admin = {
             const st = r.status||'pending';
             const stColor = st==='approved' ? 'var(--success)' : (st==='denied' ? 'var(--accent)' : 'var(--premium)');
             const stLabel = st==='approved' ? 'Approved' : (st==='denied' ? 'Denied' : 'Pending');
-            const d = new Date(r.time);
-            const timeStr = d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+            const d = r.time ? new Date(r.time) : new Date();
+            const timeStr = !isNaN(d.getTime()) ? d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : 'Unknown';
             const approveBtn = st==='pending' ? '<button class="btn-primary btn-sm" onclick="Admin.approveRequest(\''+h(r.id)+'\')"><i class="fa-solid fa-check"></i></button><button class="btn-danger btn-sm" onclick="Admin.denyRequest(\''+h(r.id)+'\')"><i class="fa-solid fa-xmark"></i></button>' : '';
             const screenshotHtml = r.screenshot ? '<div style="margin-top:6px;"><a href="#" onclick="window.open(\''+h(r.screenshot)+'\',\'_blank\');return false;" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--cyan);"><i class="fa-solid fa-image"></i> View Screenshot</a></div>' : '';
-            return '<div class="list-item"><div class="item-info"><div class="item-title" style="font-size:13px;"><i class="fa-brands fa-whatsapp" style="color:#25D366;"></i> '+h(r.whatsapp)+'</div><div class="item-sub">'+timeStr+' &bull; <span style="color:'+stColor+';font-weight:600;">'+stLabel+'</span></div>'+screenshotHtml+'</div><div class="item-actions">'+approveBtn+'</div></div>';
+            const emailHtml = r.email ? '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;"><i class="fa-solid fa-envelope"></i> '+h(r.email)+'</div>' : '';
+            return '<div class="list-item"><div class="item-info"><div class="item-title" style="font-size:13px;"><i class="fa-brands fa-whatsapp" style="color:#25D366;"></i> '+h(r.whatsapp)+'</div>'+emailHtml+'<div class="item-sub">'+timeStr+' &bull; <span style="color:'+stColor+';font-weight:600;">'+stLabel+'</span></div>'+screenshotHtml+'</div><div class="item-actions">'+approveBtn+'</div></div>';
         }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No payment requests.</div>';
 
-        // Premium Keys List
-        document.getElementById('list-premium-keys').innerHTML = this.state.premiumKeys.map(k => {
-            const uses = k.uses||0; const limit = k.limit===0 ? '&infin;' : k.limit;
-            return '<div class="list-item"><div class="item-info"><div class="item-title">'+h(k.name)+'</div><div class="item-sub" style="font-family:monospace;color:var(--premium);margin-top:2px;font-size:12px;">'+h(k.key)+'</div><div class="item-sub" style="margin-top:3px;"><span class="badge '+(k.active?'active':'inactive')+'">'+(k.active?'Active':'Disabled')+'</span> <span style="color:var(--text-muted);font-size:10px;margin-left:3px;">Uses: '+uses+'/'+limit+'</span></div></div><div class="item-actions"><button class="btn-outline btn-sm" onclick="Admin.editPremiumKey(\''+h(k.id)+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-danger btn-sm" onclick="Admin.delPremiumKey(\''+h(k.id)+'\')"><i class="fa-solid fa-trash"></i></button></div></div>';
-        }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No premium keys.</div>';
     },
 
     toggleToolIconType() {
@@ -1128,7 +1092,7 @@ const Admin = {
         container.innerHTML = html;
     },
 
-    toggleAllTools(cb) { document.querySelectorAll('.tool-chk').forEach(el => { el.disabled=cb.checked; if(cb.checked) el.checked=true; }); },
+    toggleAllTools(cb) { document.querySelectorAll('.tool-chk').forEach(el => { el.disabled=cb.checked; el.checked=cb.checked; }); },
 
     openToolSheet() { document.getElementById('form-add-tool').reset(); document.getElementById('tool-id').value=''; document.getElementById('sheet-tool-title').textContent='Upload HTML Tool'; document.getElementById('tool-icon-type').value='fa'; this.toggleToolIconType(); document.getElementById('tool-icon-fa').value='fa-solid fa-cube'; document.getElementById('tool-icon-preview').className='fa-solid fa-cube'; document.getElementById('tool-icon-base64').value=''; document.getElementById('tool-img-preview').style.display='none'; document.getElementById('tool-img-placeholder').style.display='block'; document.getElementById('tool-active').checked=true; this.showSheet('sheet-tool'); },
 
@@ -1143,7 +1107,7 @@ const Admin = {
         document.getElementById('tool-html').value=t.html||''; document.getElementById('tool-active').checked=t.active; this.showSheet('sheet-tool');
     },
 
-    delTool(id) { if(confirm('Delete this tool permanently?')){this.state.tools=this.state.tools.filter(t=>t.id!==id);this.state.keys.forEach(k=>{if(!k.tools.includes('all'))k.tools=k.tools.filter(tid=>tid!==id);});database.ref('tools').set(this.state.tools);database.ref('keys').set(this.state.keys).then(()=>{this.saveLog('Tool Deleted','HTML Tool ID: '+id);this.toast('HTML Tool Removed');});} },
+    delTool(id) { if(confirm('Delete this tool permanently?')){this.state.tools=this.state.tools.filter(t=>t.id!==id);this.state.keys.forEach(k=>{if(!k.tools.includes('all'))k.tools=k.tools.filter(tid=>tid!==id);});database.ref('tools').set(this.state.tools).catch(()=>{});database.ref('keys').set(this.state.keys).then(()=>{this.saveLog('Tool Deleted','HTML Tool ID: '+id);this.toast('HTML Tool Removed');}).catch(()=>this.toast('Failed to delete tool','error'));} },
 
     openLinkSheet() { document.getElementById('form-add-link').reset(); document.getElementById('link-id').value=''; document.getElementById('sheet-link-title').textContent='Add APK / Link'; document.getElementById('link-icon-type').value='fa'; this.toggleLinkIconType(); document.getElementById('link-icon-fa').value='fa-brands fa-android'; document.getElementById('link-icon-preview').className='fa-brands fa-android'; document.getElementById('link-icon-base64').value=''; document.getElementById('link-img-preview').style.display='none'; document.getElementById('link-img-placeholder').style.display='block'; document.getElementById('link-active').checked=true; this.showSheet('sheet-link'); },
 
@@ -1158,7 +1122,7 @@ const Admin = {
         document.getElementById('link-url').value=l.url||''; document.getElementById('link-active').checked=l.active; this.showSheet('sheet-link');
     },
 
-    delLink(id) { if(confirm('Delete this App/Link permanently?')){this.state.links=this.state.links.filter(l=>l.id!==id);this.state.keys.forEach(k=>{if(!k.tools.includes('all'))k.tools=k.tools.filter(tid=>tid!==id);});database.ref('links').set(this.state.links);database.ref('keys').set(this.state.keys).then(()=>{this.saveLog('Link Deleted','Link ID: '+id);this.toast('APK / Link Removed');});} },
+    delLink(id) { if(confirm('Delete this App/Link permanently?')){this.state.links=this.state.links.filter(l=>l.id!==id);this.state.keys.forEach(k=>{if(!k.tools.includes('all'))k.tools=k.tools.filter(tid=>tid!==id);});database.ref('links').set(this.state.links).catch(()=>{});database.ref('keys').set(this.state.keys).then(()=>{this.saveLog('Link Deleted','Link ID: '+id);this.toast('APK / Link Removed');}).catch(()=>this.toast('Failed to delete link','error'));} },
 
     openCourseSheet() { document.getElementById('form-add-course').reset(); document.getElementById('course-id').value=''; document.getElementById('sheet-course-title').textContent='Add Course'; document.getElementById('course-poster-base64').value=''; document.getElementById('course-img-preview').style.display='none'; document.getElementById('course-img-placeholder').style.display='block'; document.getElementById('course-active').checked=true; this.showSheet('sheet-course'); },
 
@@ -1177,7 +1141,7 @@ const Admin = {
         this.showSheet('sheet-course');
     },
 
-    delCourse(id) { if(confirm('Delete this Course permanently?')){this.state.courses=this.state.courses.filter(c=>c.id!==id);database.ref('courses').set(this.state.courses).then(()=>{this.saveLog('Course Deleted','Course ID: '+id);this.toast('Course Removed');});} },
+    delCourse(id) { if(confirm('Delete this Course permanently?')){this.state.courses=this.state.courses.filter(c=>c.id!==id);database.ref('courses').set(this.state.courses).then(()=>{this.saveLog('Course Deleted','Course ID: '+id);this.toast('Course Removed');}).catch(()=>this.toast('Failed to delete course','error'));} },
 
     openKeySheet() { document.getElementById('form-add-key').reset(); document.getElementById('key-id').value=''; document.getElementById('sheet-key-title').textContent='Generate Passkey'; this.populateToolCheckboxes(['all']); this.showSheet('sheet-key'); },
 
@@ -1193,7 +1157,7 @@ const Admin = {
         this.populateToolCheckboxes(k.tools||[]); this.showSheet('sheet-key');
     },
 
-    delKey(id) { if(confirm('Revoke and delete this passkey?')){this.state.keys=this.state.keys.filter(k=>k.id!==id);database.ref('keys').set(this.state.keys).then(()=>{this.saveLog('Key Revoked','ID: '+id);this.toast('Key Deleted');});} },
+    delKey(id) { if(confirm('Revoke and delete this passkey?')){this.state.keys=this.state.keys.filter(k=>k.id!==id);database.ref('keys').set(this.state.keys).then(()=>{this.saveLog('Key Revoked','ID: '+id);this.toast('Key Deleted');}).catch(()=>this.toast('Failed to delete key','error'));} },
 
     // ===== PREMIUM METHODS =====
     togglePremiumContentIconType() {
@@ -1233,6 +1197,7 @@ const Admin = {
         document.getElementById('premium-content-type').value=c.type||'course';
         document.getElementById('premium-content-icon-type').value=c.iconType||'fa';
         this.togglePremiumContentIconType();
+        this.onPremiumContentTypeChange();
         if(c.iconType==='img') {
             document.getElementById('premium-content-icon-base64').value=c.iconData||'';
             if(c.iconData){document.getElementById('premium-content-img-preview').src=c.iconData;document.getElementById('premium-content-img-preview').style.display='block';document.getElementById('premium-content-img-placeholder').style.display='none';}
@@ -1252,59 +1217,36 @@ const Admin = {
             database.ref('premiumContent').set(this.state.premiumContent).then(() => {
                 this.saveLog('Premium Content Deleted','ID: '+id);
                 this.toast('Premium content removed');
-            });
-        }
-    },
-
-    openPremiumKeySheet() {
-        document.getElementById('form-premium-key').reset();
-        document.getElementById('premium-key-id').value='';
-        document.getElementById('sheet-premium-key-title').textContent='Generate Premium Key';
-        document.getElementById('premium-key-string').value='prem_'+Math.random().toString(36).substring(2,10);
-        document.getElementById('premium-key-active').checked=true;
-        this.showSheet('sheet-premium-key');
-    },
-
-    editPremiumKey(id) {
-        const k = this.state.premiumKeys.find(x=>x.id===id); if(!k) return;
-        document.getElementById('sheet-premium-key-title').textContent='Edit Premium Key';
-        document.getElementById('premium-key-id').value=k.id;
-        document.getElementById('premium-key-name').value=k.name;
-        document.getElementById('premium-key-string').value=k.key;
-        document.getElementById('premium-key-limit').value=k.limit;
-        document.getElementById('premium-key-expiry').value=k.expiry||'';
-        document.getElementById('premium-key-active').checked=k.active;
-        this.showSheet('sheet-premium-key');
-    },
-
-    delPremiumKey(id) {
-        if(confirm('Delete this premium key permanently?')) {
-            this.state.premiumKeys = this.state.premiumKeys.filter(k=>k.id!==id);
-            database.ref('premiumKeys').set(this.state.premiumKeys).then(() => {
-                this.saveLog('Premium Key Deleted','ID: '+id);
-                this.toast('Premium key removed');
-            });
+            }).catch(() => this.toast('Failed to delete premium content','error'));
         }
     },
 
     approveRequest(id) {
         const req = this.state.premiumRequests.find(x=>x.id===id); if(!req) return;
+        if (req.status === 'approved') { this.toast('Already approved','error'); return; }
+        if (!req.uid || /[.#$\[\]]/.test(req.uid)) { this.toast('Invalid user UID','error'); return; }
         req.status = 'approved';
         database.ref('premiumRequests').set(this.state.premiumRequests).then(() => {
-            this.saveLog('Payment Approved','WhatsApp: '+req.whatsapp);
+            database.ref('premiumUsers/' + req.uid).set({ active: true, approvedAt: firebase.database.ServerValue.TIMESTAMP, email: req.email || '', whatsapp: req.whatsapp || '' });
+            this.saveLog('Payment Approved','WhatsApp: '+req.whatsapp+' Email: '+(req.email||'N/A'));
             this.toast('Payment request approved');
             this.renderAll();
-        });
+        }).catch(() => this.toast('Failed to approve request','error'));
     },
 
     denyRequest(id) {
         const req = this.state.premiumRequests.find(x=>x.id===id); if(!req) return;
+        if (req.status === 'denied') { this.toast('Already denied','error'); return; }
+        if (req.status === 'approved' && !confirm('This request was already approved. Denying will revoke premium access. Continue?')) return;
         req.status = 'denied';
         database.ref('premiumRequests').set(this.state.premiumRequests).then(() => {
+            if (req.uid) {
+                database.ref('premiumUsers/' + req.uid).remove();
+            }
             this.saveLog('Payment Denied','WhatsApp: '+req.whatsapp);
             this.toast('Payment request denied');
             this.renderAll();
-        });
+        }).catch(() => this.toast('Failed to deny request','error'));
     }
 };
 
